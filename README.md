@@ -8,7 +8,7 @@ To prepare for downstream analysis of next-generation sequencing data it is nece
 
 
 ### What does it look like?
-The PCR duplicates appear as the same sequences with the same unique molecular indices (UMIs) or inline 'randomer'. The sequences can be characterized by alignment to the same chromosome, position, and strand, of the genome. Complications that arise from sequencing can make it hard to identify PCR duplicates and remove them programatically.
+The PCR duplicates appear as the same sequences with the same unique molecular indices (UMIs) or inline 'randomer'. The sequences can be characterized by alignment to the same chromosome, position, and strand, of the genome. Complications that arise from sequencing can make it hard to identify PCR duplicates and remove them programatically such as soft-clipping and low quality base calls.
 
 
 ### What tools are available?
@@ -19,11 +19,40 @@ Various tools have been built to de-duplicate sequencing reads. [Samtools rmdup]
 Here I will begin developing a strategy for writing my own PCR duplicate removal tool in Python that de-duplicates a sorted SAM file of aligned reads.
 
 
-### Begin
-We start with a SAM file of uniquely mapped reads. First `samtools sort` will be used to sort the SAM file by base position, and return the sorted file in SAM format. A samtools command of this format could be used:
+### Starting materials
+We start with a SAM file of uniquely mapped reads. First `samtools sort` will be used to sort reads in the SAM file by left-most base position, and return the sorted file in SAM format. A samtools command of this format could be used:
 
 ```
-samtools sort -O sam -T sample.sort -o sample.sort.sam sample.sam
+samtools sort -T sample.sort -o sample.sort.sam sample.sam
 ```
 
-Now that the same file is sorted. We need to account for simple soft-clipping of the aligned reads.
+Make sure to douible check that this sorts reads by left-most base position
+
+### High-level functions
+
+A function is needed to parse the forth field of the alignment section, returning the 1-based left-most mapping position of each read.
+
+
+A function will be needed to parse the CIGAR string, and determine the level of soft clipping for the reads. If (regex to match number followed by S), returning the number of bases (if any) soft clipped.
+
+
+A function is needed to apply the soft-clip matching to reads that have the same left-most base position, but have soft clipped nucleotides.
+
+
+### Algorithm
+
+Take in file <example>.sam
+
+Remove SAM header
+
+Clean reads by removing reads with RNAME (field 3) set to "\*"
+
+Don't consider reads with flag && 4 == True (only consider mapped reads)
+
+Step through reads one at a time, storing each read to a dictionary with the left-most base position as they key, and a list (sequence, qscore, sclipped) as the value.
+
+If that left-most base position is already in the dictionary, determine if the sequences are identical.
+
+If they are, retain the sequence of highest quality. If not identical, If soft clipped, determine if there is exact match past soft clipped bases, if match retain highest quality read.
+
+Return a file, <example>.dedup.sam
