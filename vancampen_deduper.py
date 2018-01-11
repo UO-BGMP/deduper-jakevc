@@ -12,7 +12,7 @@ from collections import defaultdict
 
 def get_umi(alignment):
     '''Returns the unique molecular index (UMI) for the alignment.'''
-    umi = alignment[0].split(':')[1]
+    umi = alignment[0].split(':')[-1]
     return umi
 
 
@@ -77,6 +77,7 @@ def umi_check():
 def samtools_sort():
     '''Sorts the SAM file using samtools.'''
 
+
 def get_args():
     '''Define and return command line options.'''
     parser = argparse.ArgumentParser(prog='vancampen_deduper.py',
@@ -116,14 +117,15 @@ args = get_args()
 # cache infile
 infile = args.infile.name
 
+outfile = infile+'.dedup'
 
 # ... umifile
 umifile = args.umifile
 
-
 # match dict
 match_dict = defaultdict()
 
+# firstline case
 firstline = True
 
 # read SAM file alignments
@@ -132,40 +134,50 @@ with open(infile, 'r') as fh:
 
     if firstline:
         for line in fh:
-            line = line.strip().split('  ')
+            if line[0] != '@':
+                line = line.strip().split()
 
-            # retrieve umi
-            umi = get_umi(line)
+                # retrieve umi
+                umi = get_umi(line)
 
-            current_pos = correct_pos(line)
+                current_pos = correct_pos(line)
 
-            # chromosome number
-            chrm = get_chrm(line)
+                # chromosome number
+                chrm = get_chrm(line)
 
-            match_dict[(umi, current_pos, chrm)] = line
+                match_dict[(umi, current_pos, chrm)] = line
 
         firstline = False
+
+    # for all other lines
     else:
         for line in fh:
-            line = line.strip().split('  ')
+            if line[0] != '@':
+                line = line.strip().split()
 
-            # retrieve umi
-            umi = get_umi(line)
+                # retrieve umi
+                umi = get_umi(line)
 
-            # correct alignmnet postition
-            pos = correct_pos(line)
+                # correct alignmnet postition
+                pos = correct_pos(line)
 
-            # chromosome number
-            chrm = get_chrm(line)
+                # chromosome number
+                chrm = get_chrm(line)
 
-            # length of template
-            tlen = get_tlen(line)
+                # length of template
+                tlen = get_tlen(line)
 
-            if pos < (0.75*tlen + current_pos):
-                match_dict[(umi, pos, chrm)] = line
-            else:
-                pass
-
+                if pos < (0.75*tlen + current_pos):
+                    match_dict[(umi, pos, chrm)] = line
+                else:
+                    pass
 
 for key in match_dict:
-    print(f'{key}: {match_dict[key]}')
+    print(key)
+
+with open(outfile, 'w') as of:
+    for key in match_dict:
+        of.write('\t'.join(match_dict[key])+'\n')
+
+
+
