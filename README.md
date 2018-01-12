@@ -42,6 +42,8 @@ github.com/uo-bgmp/deduper-<user>
 ```
 Be sure to leave comments on their repositories by creating issues or by commenting on the pull request.
 
+Jake: David, Alexa, Brandon
+
 ## Part 3
 Write your deduper function! Due January 12, 2018
 
