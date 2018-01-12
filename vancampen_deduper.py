@@ -1,11 +1,17 @@
 #!/usr/bin/env python3.6
 
 """
-This script removes all PCR duplicates from a SAM file
-containing uniquely mapped RNA-seq reads.
+Jake VanCampen - Jan. 2018
+
+This script sorts a sam file of uniquely mapped RNA-seq reads by base
+position, then removes all PCR duplicates determined by chromosome,
+umi, and position.
+
+**** A current version of samtools is required to run this script ****
 """
 
 import argparse
+import subprocess
 import re
 from collections import defaultdict
 
@@ -46,6 +52,7 @@ def num_clipped(alignment):
     if soft_match:
         soft_bases = soft_match.group()
 
+        # extract the number of soft clipped bases
         num_soft = int(re.match('\d+', soft_bases).group())
 
     else:
@@ -64,18 +71,14 @@ def correct_pos(alignment):
     return pos
 
 
-def decode_flag():
-    '''Verifies mapping conditions.'''
-
-
-def umi_check():
-    '''
-    Returns TRUE if UMI in list of known UMIs.
-    '''
-
-
-def samtools_sort():
-    '''Sorts the SAM file using samtools.'''
+# function for future paired-end functionality
+def check_strand(alignment):
+    '''Takes bitwise flag and returns + or - indicating strand'''
+    FLAG = alignment[1]
+    if ((FLAG & 16) != 16):
+        return "+"
+    else:
+        return "-"
 
 
 def get_args():
@@ -97,16 +100,8 @@ def get_args():
                         type=argparse.FileType('rt',
                                                encoding='UTF-8 '))
 
-    parser.add_argument('-o', '--outfile',
-                        help='specify output file (path)',
-                        required=False,
-                        type=argparse.FileType('wt',
-                                               encoding='UTF-8 '))
-
-    parser.add_argument('-p', '--paired',
+    parser.add_argument('-p', '--paired', action='store_true',
                         help='flag indicating paired-end alignments',
-                        required=False,
-                        type=bool
                         )
     return parser.parse_args()
 
@@ -117,10 +112,30 @@ args = get_args()
 # cache infile
 infile = args.infile.name
 
-outfile = infile+'.dedup'
+outfile = infile.replace('.sam', '_dedup.sam')
 
-# ... umifile
-umifile = args.umifile
+# name the temp file
+samtemp = infile + '.sort'
+
+# name the output file
+samout = infile.replace('.sam', '_sorted.sam')
+
+# sort the samfile using samtools sort
+subprocess.run(['samtools', 'sort', '-T',
+               samtemp, '-o', samout, infile])
+
+# catch paired end flag
+if args.paired:
+    raise ValueError('No paired-end functionality implimented')
+
+# generate list of umi's from umi file
+umifile = args.umifile.name
+
+umilist = []
+with open(umifile, 'r') as umi:
+    for line in umi:
+        line = line.strip().split()
+        umilist += line
 
 # match dict
 match_dict = defaultdict()
@@ -129,7 +144,7 @@ match_dict = defaultdict()
 firstline = True
 
 # read SAM file alignments
-with open(infile, 'r') as fh:
+with open(samout, 'r') as fh:
     fh.readline()
 
     if firstline:
@@ -145,7 +160,10 @@ with open(infile, 'r') as fh:
                 # chromosome number
                 chrm = get_chrm(line)
 
-                match_dict[(umi, current_pos, chrm)] = line
+                if umi in umilist:
+                    match_dict[(umi, current_pos, chrm)] = line
+                else:
+                    pass
 
         firstline = False
 
@@ -167,17 +185,18 @@ with open(infile, 'r') as fh:
                 # length of template
                 tlen = get_tlen(line)
 
-                if pos < (0.75*tlen + current_pos):
-                    match_dict[(umi, pos, chrm)] = line
+                id = (umi, pos, chrm)
+
+                conditions = [pos > (0.75*tlen + pos) &
+                              umi in umilist &
+                              id not in match_dict]
+
+                if conditions:
+                    match_dict[id] = line
+
                 else:
                     pass
-
-for key in match_dict:
-    print(key)
 
 with open(outfile, 'w') as of:
     for key in match_dict:
         of.write('\t'.join(match_dict[key])+'\n')
-
-
-
