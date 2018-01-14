@@ -32,7 +32,7 @@ def get_pos(alignment):
 
 def get_tlen(alignment):
     tlen = alignment[8]
-    return tlen
+    return int(tlen)
 
 
 def get_chrm(alignment):
@@ -141,62 +141,62 @@ with open(umifile, 'r') as umi:
 match_dict = defaultdict()
 
 # firstline case
-firstline = True
+firstentry = True
 
 # read SAM file alignments
-with open(samout, 'r') as fh:
-    fh.readline()
+with open(samout, 'r') as fh, open(outfile, 'w') as of:
 
-    if firstline:
-        for line in fh:
-            if line[0] != '@':
-                line = line.strip().split()
+    for line in fh:
 
-                # retrieve umi
-                umi = get_umi(line)
+        # strip whitespace and newlines
+        line = line.strip()
 
-                current_pos = correct_pos(line)
+        if line[0] == '@':
+            of.write(line+'\n')
 
-                # chromosome number
-                chrm = get_chrm(line)
+        elif firstentry:
 
-                if umi in umilist:
-                    match_dict[(umi, current_pos, chrm)] = line
-                else:
-                    pass
+            line = line.split()
 
-        firstline = False
+            # retrieve umi
+            umi = get_umi(line)
 
-    # for all other lines
-    else:
-        for line in fh:
-            if line[0] != '@':
-                line = line.strip().split()
+            current_pos = correct_pos(line)
 
-                # retrieve umi
-                umi = get_umi(line)
+            # chromosome number
+            chrm = get_chrm(line)
 
-                # correct alignmnet postition
-                pos = correct_pos(line)
+            if umi in umilist:
+                match_dict[(umi, current_pos, chrm)] = line
 
-                # chromosome number
-                chrm = get_chrm(line)
+            firstentry = False
 
-                # length of template
-                tlen = get_tlen(line)
+            prev_position = current_pos
 
-                id = (umi, pos, chrm)
+        else:
+            # split the lines by field
+            line = line.split()
 
-                conditions = [pos > (0.75*tlen + pos) &
-                              umi in umilist &
-                              id not in match_dict]
+            # retrieve umi
+            umi = get_umi(line)
 
-                if conditions:
-                    match_dict[id] = line
+            # correct alignmnet postition
+            current_pos = correct_pos(line)
 
-                else:
-                    pass
+            # chromosome number
+            chrm = get_chrm(line)
 
-with open(outfile, 'w') as of:
+            # length of template
+            tlen = get_tlen(line)
+
+            attributes = (umi, current_pos, chrm)
+
+            if current_pos >= (tlen + prev_position) and\
+               umi in umilist and\
+               attributes not in match_dict:
+                match_dict[attributes] = line
+
+            prev_position = current_pos
+
     for key in match_dict:
         of.write('\t'.join(match_dict[key])+'\n')
