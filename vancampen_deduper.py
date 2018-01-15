@@ -83,10 +83,13 @@ def check_strand(alignment):
 
 def get_args():
     '''Define and return command line options.'''
-    parser = argparse.ArgumentParser(prog='vancampen_deduper.py',
-                                     description='Reference-based PCR\
-                                     deduplicator of uniquely mapped\
-                                     alignments in a SAM file.')
+    parser = argparse.ArgumentParser(
+        prog='vancampen_deduper.py',
+        description='This program removes PCR duplicates from a SAM \
+        file of uniquely mapped, single-end reads. The program first \
+        sorts the SAM file based on 1-based, leftmost mapping position\
+        using SAM tools. Please ensure that samtools is installed on\
+        your machine before running this script')
 
     parser.add_argument('-i', '--infile',
                         help='specify input file (abs path)',
@@ -96,13 +99,13 @@ def get_args():
 
     parser.add_argument('-u', '--umifile',
                         help='file containing list of known UMIs',
-                        required=False,
+                        required=True,
                         type=argparse.FileType('rt',
                                                encoding='UTF-8 '))
 
     parser.add_argument('-p', '--paired', action='store_true',
-                        help='flag indicating paired-end alignments',
-                        )
+                        help='flag indicating paired-end alignments')
+
     return parser.parse_args()
 
 
@@ -130,7 +133,6 @@ if args.paired:
 
 # generate list of umi's from umi file
 umifile = args.umifile.name
-
 umilist = []
 with open(umifile, 'r') as umi:
     for line in umi:
@@ -140,7 +142,7 @@ with open(umifile, 'r') as umi:
 # match dict
 match_dict = defaultdict()
 
-# firstline case
+# firstentry to populate dict
 firstentry = True
 
 # read SAM file alignments
@@ -151,26 +153,32 @@ with open(samout, 'r') as fh, open(outfile, 'w') as of:
         # strip whitespace and newlines
         line = line.strip()
 
+        # write header lines straight to output file
         if line[0] == '@':
             of.write(line+'\n')
 
         elif firstentry:
 
+            # split by field
             line = line.split()
 
             # retrieve umi
             umi = get_umi(line)
 
+            # store current line position
             current_pos = correct_pos(line)
 
             # chromosome number
             chrm = get_chrm(line)
 
+            # generate first entry
             if umi in umilist:
                 match_dict[(umi, current_pos, chrm)] = line
 
+            # endcase
             firstentry = False
 
+            # update previous position
             prev_position = current_pos
 
         else:
@@ -186,17 +194,22 @@ with open(samout, 'r') as fh, open(outfile, 'w') as of:
             # chromosome number
             chrm = get_chrm(line)
 
-            # length of template
+            # length of read
             tlen = get_tlen(line)
 
+            # attributes to compare
             attributes = (umi, current_pos, chrm)
 
+            # only add a new entry if it is valid
+            # and not already present.
             if current_pos >= (tlen + prev_position) and\
                umi in umilist and\
                attributes not in match_dict:
                 match_dict[attributes] = line
 
+            # update current position
             prev_position = current_pos
 
+    # write retained entries to output file
     for key in match_dict:
         of.write('\t'.join(match_dict[key])+'\n')
